@@ -3,27 +3,36 @@ import logging
 import re
 from datetime import datetime
 
-from bs4 import BeautifulSoup
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
 _LOGGER = logging.getLogger(__name__)
+
+# Lazy import to avoid issues during config flow loading
+BeautifulSoup = None
 
 
 class NixleAPI:
     """API client for Nixle local pages."""
 
-    def __init__(self, agency_url: str, hass: HomeAssistant):
+    def __init__(self, agency_url: str, hass):
         """Initialize the API client."""
+        global BeautifulSoup
+        if BeautifulSoup is None:
+            from bs4 import BeautifulSoup as BS
+            BeautifulSoup = BS
+            
         self.agency_url = agency_url.rstrip("/")
         self.hass = hass
-        self.session = async_get_clientsession(hass)
+        
+    def _get_session(self):
+        """Get aiohttp session."""
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+        return async_get_clientsession(self.hass)
 
     async def async_get_alerts(self) -> dict:
         """Get alerts from Nixle."""
         try:
+            session = self._get_session()
             url = f"{self.agency_url}/?page=1"
-            async with self.session.get(url, timeout=30) as response:
+            async with session.get(url, timeout=30) as response:
                 response.raise_for_status()
                 html = await response.text()
                 
