@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Nixle Alerts",
+        "description": "Enter your Nixle agency URL and configure alert preferences",
+        "data": {
+          "name": "Integration Name",
+          "agency_url": "Agency URL (e.g., https://local.nixle.com/manchester-nh-highway-department/)",
+          "alert_types": "Alert Types to Monitor"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Nixle",
+      "invalid_url": "Invalid Nixle URL format. Must be a local.nixle.com agency page."
+    },
+    "abort": {
+      "already_configured": "This Nixle agency is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Nixle Alert Options",
+        "description": "Configure which alert types to monitor",
+        "data": {
+          "alert_types": "Alert Types to Monitor"
+        }
+      }
+    }
+  }
+}
