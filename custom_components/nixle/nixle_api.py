@@ -36,7 +36,8 @@ class NixleAPI:
                 response.raise_for_status()
                 html = await response.text()
                 
-            soup = BeautifulSoup(html, "lxml")
+            # Use html.parser instead of lxml - it's built into Python
+            soup = BeautifulSoup(html, "html.parser")
             
             # Find all alert items
             alerts = []
