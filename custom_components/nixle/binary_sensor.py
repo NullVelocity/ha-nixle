@@ -56,10 +56,9 @@ class NixleActiveAlertSensor(CoordinatorEntity, BinarySensorEntity):
         self._entry = entry
         self._agency_name = agency_name
         self._agency_id = agency_id
-        self._attr_name = f"{agency_name} Active Alert"
-        self._attr_unique_id = f"{agency_id}_active_alert"
-        self._attr_icon = "mdi:alert"
-        self._attr_device_class = "safety"
+        self._attr_name = f"{agency_name} Alert Condition"
+        self._attr_unique_id = f"{agency_id}_alert_condition"
+        self._attr_icon = "mdi:alert-circle"
 
     @property
     def device_info(self) -> DeviceInfo:
