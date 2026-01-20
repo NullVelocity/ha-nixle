@@ -13,7 +13,7 @@ from .nixle_api import NixleAPI
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: List[Platform] = [Platform.SENSOR]
+PLATFORMS: List[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
