@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import selector
 
 DOMAIN = "nixle"
 
@@ -30,14 +31,7 @@ class NixleConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=self.add_suggested_values_to_schema(
-                {
-                    "agency_url": selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.URL,
-                        ),
-                    ),
-                },
-                {"agency_url": "https://local.nixle.com/"},
-            ),
+            data_schema=vol.Schema({
+                vol.Required("agency_url", default="https://local.nixle.com/"): str,
+            }),
         )
