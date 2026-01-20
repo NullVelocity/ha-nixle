@@ -8,6 +8,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/NullVelocity/ha-nixle/issues",
   "requirements": ["beautifulsoup4==4.12.3"],
-  "version": "1.1.0",
+  "version": "1.1.1",
   "integration_type": "service"
 }

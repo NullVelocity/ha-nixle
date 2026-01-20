@@ -72,47 +72,76 @@ class NixleActiveAlertSensor(CoordinatorEntity, BinarySensorEntity):
             configuration_url=self._entry.data["agency_url"],
         )
 
-    def _parse_alert_date(self, text: str) -> datetime | None:
-        """Parse date from alert text."""
+    def _parse_alert_date(self, text: str, timestamp_text: str) -> datetime | None:
+        """Parse date from alert text and timestamp."""
         now = dt_util.now()
         
+        # First check how old the alert is from the timestamp
+        # "Entered: X days, Y hours ago" or "Entered: X hours ago"
+        days_match = re.search(r"(\d+)\s+days?", timestamp_text)
+        hours_match = re.search(r"(\d+)\s+hours?", timestamp_text)
+        
+        days_ago = int(days_match.group(1)) if days_match else 0
+        hours_ago = int(hours_match.group(1)) if hours_match else 0
+        
+        # Alert was posted this many days/hours ago
+        alert_posted = now - timedelta(days=days_ago, hours=hours_ago)
+        
         # Pattern: "tonight, Day, Month Date, Year" or "tonight, Day, Month Date"
-        # Example: "tonight, Sunday, January 18, 2026" or "tonight, Sunday, January 18th"
         tonight_pattern = r"tonight,\s+\w+,\s+(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s+(\d{4}))?"
         match = re.search(tonight_pattern, text, re.IGNORECASE)
         if match:
             month_name, day, year = match.groups()
-            year = int(year) if year else now.year
-            month = MONTHS.get(month_name, now.month)
+            year = int(year) if year else alert_posted.year
+            month = MONTHS.get(month_name, alert_posted.month)
             day = int(day)
-            # "tonight" means the alert date, expires 6am next day
-            alert_date = datetime(year, month, day, 6, 0, 0)
-            return dt_util.as_local(alert_date) + timedelta(days=1)
+            
+            # Create the alert date (the "tonight" mentioned)
+            try:
+                alert_date = dt_util.as_local(datetime(year, month, day, 0, 0, 0))
+                # Expires at 6am the next day
+                expiry = alert_date.replace(hour=6, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                _LOGGER.debug(f"Parsed 'tonight' alert: date={alert_date}, expires={expiry}, now={now}")
+                return expiry
+            except ValueError as e:
+                _LOGGER.warning(f"Invalid date parsed: {year}/{month}/{day} - {e}")
+                return None
         
         # Pattern: "for Day night, Month Date" or "may be declared Day night, Month Date"
-        # Example: "Sunday night, January 18th"
         night_pattern = r"(?:for|declared)\s+\w+\s+night,\s+(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?"
         match = re.search(night_pattern, text, re.IGNORECASE)
         if match:
             month_name, day = match.groups()
-            month = MONTHS.get(month_name, now.month)
+            month = MONTHS.get(month_name, alert_posted.month)
             day = int(day)
-            # Night declaration expires 6am next day
-            alert_date = datetime(now.year, month, day, 6, 0, 0)
-            return dt_util.as_local(alert_date) + timedelta(days=1)
+            year = alert_posted.year
+            
+            try:
+                alert_date = dt_util.as_local(datetime(year, month, day, 0, 0, 0))
+                expiry = alert_date.replace(hour=6, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                _LOGGER.debug(f"Parsed 'night' alert: date={alert_date}, expires={expiry}, now={now}")
+                return expiry
+            except ValueError as e:
+                _LOGGER.warning(f"Invalid date parsed: {year}/{month}/{day} - {e}")
+                return None
         
         # Pattern: "for Day, Month Date" (not tonight)
-        # Example: "for Tuesday, March 14"
         day_pattern = r"for\s+\w+,\s+(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s+(\d{4}))?"
         match = re.search(day_pattern, text, re.IGNORECASE)
         if match:
             month_name, day, year = match.groups()
-            year = int(year) if year else now.year
-            month = MONTHS.get(month_name, now.month)
+            year = int(year) if year else alert_posted.year
+            month = MONTHS.get(month_name, alert_posted.month)
             day = int(day)
-            # Specific day expires 6am next day
-            alert_date = datetime(year, month, day, 6, 0, 0)
-            return dt_util.as_local(alert_date) + timedelta(days=1)
+            
+            try:
+                alert_date = dt_util.as_local(datetime(year, month, day, 0, 0, 0))
+                expiry = alert_date.replace(hour=6, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                _LOGGER.debug(f"Parsed specific day alert: date={alert_date}, expires={expiry}, now={now}")
+                return expiry
+            except ValueError as e:
+                _LOGGER.warning(f"Invalid date parsed: {year}/{month}/{day} - {e}")
+                return None
         
         return None
 
@@ -120,32 +149,26 @@ class NixleActiveAlertSensor(CoordinatorEntity, BinarySensorEntity):
         """Check if an alert is currently active."""
         alert_type = alert.get("type", "")
         text = alert.get("text", "")
+        timestamp = alert.get("timestamp", "")
         
         # Only process "Alert" type
         if alert_type != "Alert":
             return False
         
-        # Check if it's a "may be declared" alert
-        if "may be declared" in text.lower():
-            # Active only for today until 6am tomorrow
-            expiry = self._parse_alert_date(text)
-            if expiry:
-                now = dt_util.now()
-                # If no specific date, expires 6am tomorrow
-                if expiry < now:
-                    return False
-                return True
-            # Default: active until 6am tomorrow
-            tomorrow_6am = dt_util.now().replace(hour=6, minute=0, second=0, microsecond=0) + timedelta(days=1)
-            return dt_util.now() < tomorrow_6am
+        # Parse the expiry date
+        expiry = self._parse_alert_date(text, timestamp)
         
-        # Check if alert has expired
-        expiry = self._parse_alert_date(text)
-        if expiry:
-            return dt_util.now() < expiry
+        if not expiry:
+            # Couldn't parse date - assume inactive
+            _LOGGER.debug(f"Could not parse date from alert: {text}")
+            return False
         
-        # If we can't parse a date, not active
-        return False
+        now = dt_util.now()
+        is_active = now < expiry
+        
+        _LOGGER.debug(f"Alert active check: '{text[:50]}...' - expires={expiry}, now={now}, active={is_active}")
+        
+        return is_active
 
     @property
     def is_on(self) -> bool:
@@ -173,7 +196,7 @@ class NixleActiveAlertSensor(CoordinatorEntity, BinarySensorEntity):
         
         for alert in alerts:
             if self._is_alert_active(alert):
-                expiry = self._parse_alert_date(alert["text"])
+                expiry = self._parse_alert_date(alert["text"], alert.get("timestamp", ""))
                 active_alerts.append({
                     "type": alert["type"],
                     "text": alert["text"],
